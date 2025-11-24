@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-	<title>FlowFusion - Two-Fluid Flow Simulation</title>
+	<title>Stratify - Two-Fluid Flow Simulation</title>
 	<meta name="description" content="Interactive two-phase fluid flow simulation using Three.js" />
 </svelte:head>
 

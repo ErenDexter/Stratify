@@ -15,7 +15,7 @@
 </script>
 
 <div
-	class="fixed top-6 right-6 bg-gray-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl !p-4 w-96 border border-gray-700/50"
+	class="hidden md:block fixed top-6 right-6 bg-gray-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl !p-4 w-96 border border-gray-700/50"
 >
 	<h2 class="text-2xl font-bold mb-8 text-white">Flow Controls</h2>
 

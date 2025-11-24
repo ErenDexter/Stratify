@@ -1,5 +1,5 @@
 <div
-	class="fixed bottom-6 left-6 !p-4 bg-gray-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl p-8 w-[420px] border border-gray-700/50"
+	class="hidden md:block fixed bottom-6 left-6 !p-4 bg-gray-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl p-8 w-[420px] border border-gray-700/50"
 >
 	<h2 class="text-2xl font-bold mb-5 text-white">Stratify</h2>
 

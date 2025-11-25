@@ -56,22 +56,20 @@ export class FluidEngine {
 
 		const material = new THREE.PointsMaterial({
 			color: color,
-			size: 0.1, // Smaller particles for denser appearance
+			size: 0.1,
 			map: sprite,
 			transparent: true,
-			opacity: 1.0, // Full opacity for solid appearance
+			opacity: 1.0,
 			blending: THREE.NormalBlending,
 			sizeAttenuation: true,
-			depthWrite: false, // Don't write to depth buffer
-			depthTest: false, // Don't test depth - allows both fluid layers to always be visible
+			depthWrite: false,
+			depthTest: false,
 			vertexColors: false,
 			alphaTest: 0.01
 		});
 
 		const points = new THREE.Points(geometry, material);
-		// High render order ensures particles render after pipe
-		// Pipe (renderOrder 0) writes depth first, then particles render on top
-		// Without depth testing, particles from both layers will always be visible
+
 		points.renderOrder = phase === 'upper' ? 100 : 99;
 		points.frustumCulled = false;
 		points.visible = true;
@@ -84,7 +82,6 @@ export class FluidEngine {
 	update(deltaTime: number, time: number): void {
 		if (!this.fluidPhases.upper || !this.fluidPhases.lower) return;
 
-		// Calculate interface velocity for viscous coupling
 		const interfaceVelocity = PhysicsCalculator.calculateInterfaceVelocity(
 			this.config.upperFluid.flowRate,
 			this.config.lowerFluid.flowRate,
@@ -92,7 +89,6 @@ export class FluidEngine {
 			this.config.lowerFluid.viscosity
 		);
 
-		// Update particle positions with interface velocity influence
 		this.particleSystem.updateParticles(
 			this.fluidPhases.upper.data,
 			this.config.upperFluid,
@@ -109,7 +105,6 @@ export class FluidEngine {
 			interfaceVelocity
 		);
 
-		// Apply interface interaction with viscous coupling
 		this.particleSystem.applyInterfaceInteraction(
 			this.fluidPhases.upper.data,
 			this.fluidPhases.lower.data,
@@ -120,20 +115,17 @@ export class FluidEngine {
 			time
 		);
 
-		// Update geometry attributes for both phases
 		const upperPosAttr = this.fluidPhases.upper.geometry.attributes
 			.position as THREE.BufferAttribute;
 		const lowerPosAttr = this.fluidPhases.lower.geometry.attributes
 			.position as THREE.BufferAttribute;
 
-		// Copy position data to geometry attributes
 		upperPosAttr.array.set(this.fluidPhases.upper.data.positions);
 		lowerPosAttr.array.set(this.fluidPhases.lower.data.positions);
 
 		upperPosAttr.needsUpdate = true;
 		lowerPosAttr.needsUpdate = true;
 
-		// Ensure both point systems are visible and in the scene
 		this.fluidPhases.upper.points.visible = true;
 		this.fluidPhases.lower.points.visible = true;
 	}

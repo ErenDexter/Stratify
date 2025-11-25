@@ -21,36 +21,32 @@ export class ParticleSystem {
 		for (let i = 0; i < this.particleCount; i++) {
 			const i3 = i * 3;
 
-			// Random position along pipe length
 			positions[i3] = (Math.random() - 0.5) * this.pipeLength;
 
-			// Uniform distribution in semi-circle using polar sampling (no bias)
+			// Uniform distribution in semi-circle using polar sampling
 			const radius = Math.sqrt(Math.random()) * this.pipeRadius;
-			const overlap = this.pipeRadius * 0.3; // Significant overlap to ensure continuous interface
+			const overlap = this.pipeRadius * 0.3;
 
 			if (phase === 'upper') {
-				const theta = Math.random() * Math.PI; // 0..π (y >= 0)
+				const theta = Math.random() * Math.PI;
 				let y = radius * Math.sin(theta);
 				const z = radius * Math.cos(theta);
 
-				// Ensure slight overlap across interface for visual continuity
 				y -= overlap * Math.random();
 
 				positions[i3 + 1] = y + yOffset;
 				positions[i3 + 2] = z;
 			} else {
-				const theta = Math.random() * Math.PI + Math.PI; // π..2π (y <= 0)
+				const theta = Math.random() * Math.PI + Math.PI;
 				let y = radius * Math.sin(theta);
 				const z = radius * Math.cos(theta);
 
-				// Ensure slight overlap
 				y += overlap * Math.random();
 
 				positions[i3 + 1] = y + yOffset;
 				positions[i3 + 2] = z;
 			}
 
-			// Initial velocities
 			velocities[i3] = 0.1;
 			velocities[i3 + 1] = 0;
 			velocities[i3 + 2] = 0;
@@ -85,9 +81,6 @@ export class ParticleSystem {
 			const wallDistance = this.pipeRadius - r;
 			const wallThickness = this.pipeRadius * 0.05; // 5% boundary layer
 
-			// Use the realistic stratified velocity profile
-			// This handles no-slip at walls (r=R) and velocity continuity at interface (y=0)
-			// If interfaceVelocity is undefined (e.g. during init), use standard Poiseuille
 			let targetVelocity;
 
 			if (interfaceVelocity !== undefined) {
@@ -103,39 +96,29 @@ export class ParticleSystem {
 				targetVelocity = PhysicsCalculator.calculateParabolicVelocity(flowRate, r, this.pipeRadius);
 			}
 
-			// Strict no-slip enforcement: velocity must be zero at and near wall
 			if (wallDistance < wallThickness) {
 				// Linear decay to zero velocity as approaching wall
 				const wallFactor = Math.max(0, wallDistance / wallThickness);
 				targetVelocity *= wallFactor;
 
-				// Also damp existing velocity near wall
 				velocities[i3] *= wallFactor;
 			}
 
-			// Accelerate towards target velocity
-			// This replaces the simple += velocityProfile * deltaTime
-			// We want particles to converge to the target velocity profile
-			// Relaxation represents the viscous drag force bringing the particle to the local flow velocity
-			const relaxationFactor = 5.0 * deltaTime; // Faster convergence to profile
+			const relaxationFactor = 5.0 * deltaTime;
 			velocities[i3] += (targetVelocity - velocities[i3]) * relaxationFactor;
 
-			// Add a small driving force component to ensure flow doesn't stop completely if far from target
 			if (Math.abs(targetVelocity) > 0.001 && wallDistance > wallThickness) {
 				velocities[i3] += targetVelocity * deltaTime * 0.1;
 			}
 
-			// Update position
 			positions[i3] += velocities[i3] * deltaTime;
 			positions[i3 + 1] += velocities[i3 + 1] * deltaTime;
 			positions[i3 + 2] += velocities[i3 + 2] * deltaTime;
 
-			// Check and enforce wall boundary - particles cannot penetrate wall
 			const newR = Math.sqrt(
 				positions[i3 + 1] * positions[i3 + 1] + positions[i3 + 2] * positions[i3 + 2]
 			);
 			if (newR >= this.pipeRadius) {
-				// Particle hit wall - reflect it back and zero its velocity
 				const scale = (this.pipeRadius * 0.98) / newR;
 				positions[i3 + 1] *= scale;
 				positions[i3 + 2] *= scale;
@@ -146,18 +129,15 @@ export class ParticleSystem {
 				velocities[i3 + 2] = 0;
 			}
 
-			// Gentle lateral damping - too strong prevents gap filling
 			const lateralDamping = Math.max(0, 1 - 0.5 * deltaTime);
 			velocities[i3 + 1] *= lateralDamping;
 			velocities[i3 + 2] *= lateralDamping;
 
-			// Add turbulence for high flow rates
 			if (flowRate > 1.0) {
 				const turbulenceIntensity = (flowRate - 1.0) * 0.01;
 				positions[i3 + 1] += (Math.random() - 0.5) * turbulenceIntensity;
 				positions[i3 + 2] += (Math.random() - 0.5) * turbulenceIntensity;
 
-				// Keep within pipe bounds
 				const newR = Math.sqrt(
 					positions[i3 + 1] * positions[i3 + 1] + positions[i3 + 2] * positions[i3 + 2]
 				);
@@ -168,9 +148,11 @@ export class ParticleSystem {
 				}
 			}
 
-			// Periodic boundary condition
+			// Periodic boundary condition (both directions)
 			if (positions[i3] > this.pipeLength / 2) {
 				positions[i3] = -this.pipeLength / 2;
+			} else if (positions[i3] < -this.pipeLength / 2) {
+				positions[i3] = this.pipeLength / 2;
 			}
 		}
 	}
@@ -198,7 +180,7 @@ export class ParticleSystem {
 		const waveSpeed = 2;
 
 		// Apply viscous coupling: particles near interface experience shear stress
-		const interfaceRegion = this.pipeRadius * 0.3; // Region near interface affected by coupling
+		const interfaceRegion = this.pipeRadius * 0.3;
 
 		for (let i = 0; i < this.particleCount; i++) {
 			const i3 = i * 3;
@@ -207,37 +189,29 @@ export class ParticleSystem {
 			const yUpper = upperData.positions[i3 + 1];
 			const yLower = lowerData.positions[i3 + 1];
 
-			// Distance from interface
 			const distUpper = Math.abs(yUpper);
 			const distLower = Math.abs(yLower);
 
-			// Apply viscous shear force for particles near interface
 			if (distUpper < interfaceRegion) {
 				const couplingStrength = 1 - distUpper / interfaceRegion;
-				// Calculate velocity difference and apply viscous drag
-				const velocityDiffAtInterface = interfaceVelocity - upperData.velocities[i3];
-				const shearForce = PhysicsCalculator.calculateViscousShear(
+				const drag = PhysicsCalculator.calculateViscousDrag(
 					interfaceVelocity,
 					upperData.velocities[i3],
 					upperViscosity,
-					distUpper + 0.01 // Avoid division by zero
+					distUpper + 0.01
 				);
-				// Apply shear force (proportional to viscosity and velocity gradient)
-				upperData.velocities[i3] += shearForce * couplingStrength * 0.1;
+				upperData.velocities[i3] += drag * couplingStrength;
 			}
 
 			if (distLower < interfaceRegion) {
 				const couplingStrength = 1 - distLower / interfaceRegion;
-				// Calculate velocity difference and apply viscous drag
-				const velocityDiffAtInterface = interfaceVelocity - lowerData.velocities[i3];
-				const shearForce = PhysicsCalculator.calculateViscousShear(
+				const drag = PhysicsCalculator.calculateViscousDrag(
 					interfaceVelocity,
 					lowerData.velocities[i3],
 					lowerViscosity,
 					distLower + 0.01
 				);
-				// Apply shear force
-				lowerData.velocities[i3] += shearForce * couplingStrength * 0.1;
+				lowerData.velocities[i3] += drag * couplingStrength;
 			}
 
 			// Apply Kelvin-Helmholtz instability at interface (reduced to prevent separation)
@@ -245,8 +219,6 @@ export class ParticleSystem {
 			// v_y = d(A*sin(kx - wt))/dt = -A*w*cos(kx - wt) (roughly)
 			// We add this to velocity instead of position to avoid accumulation drift
 			const waveVel = waveAmplitude * 2.0 * Math.cos(xUpper * waveFrequency + time * waveSpeed);
-
-			// Apply only very close to interface with small magnitude
 			if (distUpper < 0.2) {
 				upperData.velocities[i3 + 1] += waveVel * (1 - distUpper / 0.2) * 0.02;
 			}

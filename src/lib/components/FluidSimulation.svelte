@@ -74,7 +74,6 @@
 		controls.enableDamping = true;
 		controls.dampingFactor = 0.05;
 
-		// Lighting
 		const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 		scene.add(ambientLight);
 
@@ -82,7 +81,6 @@
 		directionalLight.position.set(10, 10, 10);
 		scene.add(directionalLight);
 
-		// Grid helper
 		const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
 		gridHelper.position.y = -1.5;
 		scene.add(gridHelper);
@@ -94,7 +92,6 @@
 		const pipeLength = config.pipeLength;
 		const pipeRadius = config.pipeRadius;
 
-		// Outer pipe
 		const pipeGeometry = new THREE.CylinderGeometry(
 			pipeRadius,
 			pipeRadius,
@@ -110,16 +107,15 @@
 			opacity: 0.2,
 			side: THREE.DoubleSide,
 			emissive: 0x222222,
-			depthWrite: true, // Pipe writes to depth buffer
+			depthWrite: true,
 			depthTest: true
 		});
 
 		const pipe = new THREE.Mesh(pipeGeometry, pipeMaterial);
 		pipe.rotation.z = Math.PI / 2;
-		pipe.renderOrder = 0; // Render pipe first so its depth is written
+		pipe.renderOrder = 0;
 		scene.add(pipe);
 
-		// End caps
 		const capGeometry = new THREE.CircleGeometry(pipeRadius, 32);
 		const capMaterial = new THREE.MeshBasicMaterial({
 			color: 0x444444,
@@ -136,7 +132,6 @@
 		rightCap.rotation.y = -Math.PI / 2;
 		scene.add(rightCap);
 
-		// Interface plane
 		const interfaceGeometry = new THREE.PlaneGeometry(pipeLength, pipeRadius * 2);
 		const interfaceMaterial = new THREE.MeshBasicMaterial({
 			color: 0xffffff,
@@ -164,7 +159,6 @@
 		const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
 		lastTime = currentTime;
 
-		// Update fluid parameters
 		fluidEngine.updateFluidParameters('upper', {
 			flowRate: upperFlowRate,
 			viscosity: upperViscosity

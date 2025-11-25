@@ -3,11 +3,11 @@
   Stratify
 </h1>
 
-<p align="center">
+<p align="left">
   An interactive two-phase stratified flow simulation demonstrating fluid mechanics principles in a horizontal pipe.
 </p>
 
-<p align="center">
+<p align="left">
   <img src="https://img.shields.io/badge/SvelteKit-FF3E00?style=for-the-badge&logo=svelte&logoColor=white" alt="SvelteKit">
   <img src="https://img.shields.io/badge/Three.js-000000?style=for-the-badge&logo=three.js&logoColor=white" alt="Three.js">
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="TailwindCSS">

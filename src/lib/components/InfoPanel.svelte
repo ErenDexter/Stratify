@@ -36,7 +36,10 @@
 		: '-bottom-full opacity-0 pointer-events-none'} md:bottom-6 md:opacity-100 md:pointer-events-auto"
 >
 	<div class="md:hidden flex items-center justify-between">
-		<span class="text-base text-gray-500 font-medium">Stratify</span>
+		<div class="flex items-center gap-2">
+			<img src="/favicon.svg" alt="Stratify logo" class="w-4 h-4" />
+			<span class="text-base text-gray-500 font-medium">Stratify</span>
+		</div>
 		<button
 			onclick={() => (isPanelOpen = false)}
 			class="!p-1 rounded-lg hover:bg-gray-800/50 transition-colors text-gray-400 hover:text-white"
@@ -74,7 +77,10 @@
 	</div>
 
 	<div class={activeTab === 'info' ? 'block' : 'hidden md:block'}>
-		<h2 class="hidden md:block text-xl md:text-2xl font-bold text-white">Stratify</h2>
+		<h2 class="hidden md:flex items-center gap-2.5 text-xl md:text-2xl font-bold text-white">
+			<img src="/favicon.svg" alt="Stratify logo" class="w-5 h-5" />
+			Stratify
+		</h2>
 
 		<p class="text-sm md:text-base text-gray-300 !mb-2 leading-relaxed">
 			Interactive two-phase stratified flow simulation in a horizontal pipe with momentum transfer.

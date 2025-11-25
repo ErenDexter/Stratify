@@ -1,10 +1,17 @@
-# Stratify
+<h1 align="left">
+  <img src="static/favicon.svg" alt="Stratify Logo" width="25" height="25" style="vertical-align: middle;">
+  Stratify
+</h1>
 
-An interactive two-phase stratified flow simulation demonstrating fluid mechanics principles in a horizontal pipe.
+<p align="center">
+  An interactive two-phase stratified flow simulation demonstrating fluid mechanics principles in a horizontal pipe.
+</p>
 
-![Stratify Banner](https://img.shields.io/badge/SvelteKit-FF3E00?style=for-the-badge&logo=svelte&logoColor=white)
-![Three.js](https://img.shields.io/badge/Three.js-000000?style=for-the-badge&logo=three.js&logoColor=white)
-![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+<p align="center">
+  <img src="https://img.shields.io/badge/SvelteKit-FF3E00?style=for-the-badge&logo=svelte&logoColor=white" alt="SvelteKit">
+  <img src="https://img.shields.io/badge/Three.js-000000?style=for-the-badge&logo=three.js&logoColor=white" alt="Three.js">
+  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="TailwindCSS">
+</p>
 
 ## Overview
 

@@ -35,7 +35,7 @@ When two immiscible fluids with different densities flow through a horizontal pi
     ┌────────────────────────────────────┐
     │  ~~~~~~~~ Upper Fluid (Oil) ~~~~~~~│  ρ₁, μ₁
     │════════════ Interface ═════════════│  y = 0
-    │  ≋≋≋≋≋≋≋≋ Lower Fluid (Water) ≋≋≋≋│  ρ₂, μ₂
+    │  ≋≋≋≋≋≋ Lower Fluid (Water) ≋≋≋≋│  ρ₂, μ₂
     └────────────────────────────────────┘
 ```
 

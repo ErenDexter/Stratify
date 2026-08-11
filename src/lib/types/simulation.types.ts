@@ -11,6 +11,7 @@ export interface SimulationConfig {
 	particleCount: number;
 	pipeLength: number;
 	pipeRadius: number;
+	gravity: number;
 	upperFluid: FluidParameters;
 	lowerFluid: FluidParameters;
 }
@@ -19,6 +20,10 @@ export interface ParticleData {
 	positions: Float32Array;
 	velocities: Float32Array;
 	sizes: Float32Array;
+	/** Stable base vertical position each particle settles at (stratification anchor). */
+	homeY: Float32Array;
+	/** Stable base horizontal (cross-stream) position. */
+	homeZ: Float32Array;
 }
 
 export interface FluidPhase {

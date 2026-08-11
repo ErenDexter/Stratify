@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import type { SimulationConfig, FluidPhase } from '../types/simulation.types';
 import { ParticleSystem } from './ParticleSystem';
-import { PhysicsCalculator } from './PhysicsCalculator';
 
 export class FluidEngine {
 	private scene: THREE.Scene;
@@ -22,8 +21,8 @@ export class FluidEngine {
 
 	initialize(): void {
 		// Interface at y=0: upper fluid from 0 to +pipeRadius, lower fluid from -pipeRadius to 0
-		this.createFluidPhase('upper', this.config.upperFluid.color, 0);
-		this.createFluidPhase('lower', this.config.lowerFluid.color, 0);
+		this.createFluidPhase('upper', this.config.upperFluid.color);
+		this.createFluidPhase('lower', this.config.lowerFluid.color);
 	}
 
 	private createParticleTexture(): THREE.CanvasTexture {
@@ -44,9 +43,9 @@ export class FluidEngine {
 		return texture;
 	}
 
-	private createFluidPhase(phase: 'upper' | 'lower', color: number, yOffset: number): void {
+	private createFluidPhase(phase: 'upper' | 'lower', color: number): void {
 		const geometry = new THREE.BufferGeometry();
-		const data = this.particleSystem.initializeParticles(phase, yOffset);
+		const data = this.particleSystem.initializeParticles(phase);
 
 		geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
 		geometry.setAttribute('velocity', new THREE.BufferAttribute(data.velocities, 3));
@@ -82,36 +81,23 @@ export class FluidEngine {
 	update(deltaTime: number, time: number): void {
 		if (!this.fluidPhases.upper || !this.fluidPhases.lower) return;
 
-		const interfaceVelocity = PhysicsCalculator.calculateInterfaceVelocity(
-			this.config.upperFluid.flowRate,
-			this.config.lowerFluid.flowRate,
-			this.config.upperFluid.viscosity,
-			this.config.lowerFluid.viscosity
-		);
-
 		this.particleSystem.updateParticles(
 			this.fluidPhases.upper.data,
+			'upper',
 			this.config.upperFluid,
+			this.config.lowerFluid,
+			this.config.gravity,
 			deltaTime,
-			time,
-			interfaceVelocity
+			time
 		);
 
 		this.particleSystem.updateParticles(
 			this.fluidPhases.lower.data,
+			'lower',
+			this.config.upperFluid,
 			this.config.lowerFluid,
+			this.config.gravity,
 			deltaTime,
-			time,
-			interfaceVelocity
-		);
-
-		this.particleSystem.applyInterfaceInteraction(
-			this.fluidPhases.upper.data,
-			this.fluidPhases.lower.data,
-			this.config.upperFluid.flowRate,
-			this.config.lowerFluid.flowRate,
-			this.config.upperFluid.viscosity,
-			this.config.lowerFluid.viscosity,
 			time
 		);
 

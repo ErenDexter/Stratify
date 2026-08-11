@@ -25,6 +25,7 @@
 		particleCount: 8000,
 		pipeLength: 10,
 		pipeRadius: 1,
+		gravity: 9.81,
 		upperFluid: {
 			flowRate: upperFlowRate,
 			viscosity: upperViscosity,

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { PhysicsCalculator } from '../simulation/PhysicsCalculator';
+
 	let {
 		upperFlowRate = 0.5,
 		lowerFlowRate = 0.3,
@@ -12,65 +14,59 @@
 	const padding = { top: 25, right: 20, bottom: 30, left: 45 };
 	const graphWidth = width - padding.left - padding.right;
 	const graphHeight = height - padding.top - padding.bottom;
-
 	const pipeRadius = 1;
+	const steps = 60;
 
-	function getInterfaceVelocity(): number {
-		const total = upperViscosity + lowerViscosity;
-		if (total === 0) return (upperFlowRate + lowerFlowRate) / 2;
-		return (upperViscosity * upperFlowRate + lowerViscosity * lowerFlowRate) / total;
-	}
+	// Single source of truth: the chart samples the exact same velocity field the
+	// 3D particles are advected by, along the vertical centre-plane (z = 0).
+	const upper = $derived({ flowRate: upperFlowRate, viscosity: upperViscosity });
+	const lower = $derived({ flowRate: lowerFlowRate, viscosity: lowerViscosity });
 
-	function getVelocity(y: number, isUpper: boolean): number {
-		const flowRate = isUpper ? upperFlowRate : lowerFlowRate;
-		const viscosity = isUpper ? upperViscosity : lowerViscosity;
-		const interfaceVel = getInterfaceVelocity();
+	const interfaceVel = $derived(
+		PhysicsCalculator.calculateInterfaceVelocity(
+			upperFlowRate,
+			lowerFlowRate,
+			upperViscosity,
+			lowerViscosity
+		)
+	);
 
-		const distFromInterface = Math.abs(y);
-
-		// For stratified flow, blend between interface velocity and Poiseuille profile
-		// At interface (y=0): velocity = interfaceVelocity
-		// At wall (y=±1): velocity = 0
-
-		const viscosityFactor = 1.0 / Math.max(0.1, viscosity);
-		const nativeVel = flowRate * viscosityFactor * (1 - y * y);
-
-		const ratio = distFromInterface / pipeRadius;
-		const blendPower = 1.5 + 0.5 / Math.max(0.1, viscosity);
-		const blend = Math.pow(ratio, blendPower);
-
-		return interfaceVel * (1 - blend) + nativeVel * blend;
-	}
-
-	function generateProfilePath(isUpper: boolean): string {
-		const points: string[] = [];
-		const yStart = isUpper ? 0 : 0;
-		const yEnd = isUpper ? pipeRadius : -pipeRadius;
-		const steps = 50;
-
+	const samples = $derived.by(() => {
+		const arr: { y: number; v: number }[] = [];
 		for (let i = 0; i <= steps; i++) {
-			const y = isUpper ? (i / steps) * pipeRadius : -(i / steps) * pipeRadius;
-			const velocity = getVelocity(y, isUpper);
-
-			const svgX = padding.left + ((velocity + 2) / 4) * graphWidth;
-			const svgY = padding.top + ((pipeRadius - y) / (2 * pipeRadius)) * graphHeight;
-
-			points.push(`${svgX},${svgY}`);
+			const y = pipeRadius - (i / steps) * 2 * pipeRadius; // +R (top) down to -R (bottom)
+			arr.push({ y, v: PhysicsCalculator.stratifiedAxialVelocity(y, 0, upper, lower, pipeRadius) });
 		}
-
-		return points.join(' ');
-	}
-
-	$effect(() => {
-		upperFlowRate;
-		lowerFlowRate;
-		upperViscosity;
-		lowerViscosity;
+		return arr;
 	});
 
-	const velocityTicks = [-2, -1, 0, 1, 2];
+	// Auto-scale the velocity axis so the profile can never run off the chart.
+	const vMax = $derived.by(() => {
+		let m = 0;
+		for (const s of samples) m = Math.max(m, Math.abs(s.v));
+		return Math.max(1, Math.ceil(m));
+	});
 
+	const xPos = (v: number) => padding.left + ((v + vMax) / (2 * vMax)) * graphWidth;
+	const yPos = (y: number) =>
+		padding.top + ((pipeRadius - y) / (2 * pipeRadius)) * graphHeight;
+
+	const upperPath = $derived(
+		samples
+			.filter((s) => s.y >= 0)
+			.map((s) => `${xPos(s.v)},${yPos(s.y)}`)
+			.join(' ')
+	);
+	const lowerPath = $derived(
+		samples
+			.filter((s) => s.y <= 0)
+			.map((s) => `${xPos(s.v)},${yPos(s.y)}`)
+			.join(' ')
+	);
+
+	const velocityTicks = $derived([-vMax, -vMax / 2, 0, vMax / 2, vMax]);
 	const positionTicks = [-1, -0.5, 0, 0.5, 1];
+	const fmt = (v: number) => (Number.isInteger(v) ? `${v}` : v.toFixed(1));
 </script>
 
 <div
@@ -85,9 +81,9 @@
 	<svg {width} {height} class="bg-gray-800/50 rounded-lg !p-0">
 		{#each velocityTicks as tick}
 			<line
-				x1={padding.left + ((tick + 2) / 4) * graphWidth}
+				x1={xPos(tick)}
 				y1={padding.top}
-				x2={padding.left + ((tick + 2) / 4) * graphWidth}
+				x2={xPos(tick)}
 				y2={padding.top + graphHeight}
 				stroke={tick === 0 ? '#6b7280' : '#374151'}
 				stroke-width={tick === 0 ? 1.5 : 0.5}
@@ -141,7 +137,7 @@
 		/>
 
 		<polyline
-			points={generateProfilePath(true)}
+			points={upperPath}
 			fill="none"
 			stroke="#3b82f6"
 			stroke-width="2.5"
@@ -150,7 +146,7 @@
 		/>
 
 		<polyline
-			points={generateProfilePath(false)}
+			points={lowerPath}
 			fill="none"
 			stroke="#f97316"
 			stroke-width="2.5"
@@ -159,7 +155,7 @@
 		/>
 
 		<circle
-			cx={padding.left + ((getInterfaceVelocity() + 2) / 4) * graphWidth}
+			cx={xPos(interfaceVel)}
 			cy={padding.top + graphHeight / 2}
 			r="4"
 			fill="#10b981"
@@ -181,13 +177,8 @@
 		</text>
 
 		{#each velocityTicks as tick}
-			<text
-				x={padding.left + ((tick + 2) / 4) * graphWidth}
-				y={height - 18}
-				text-anchor="middle"
-				class="tick-label"
-			>
-				{tick}
+			<text x={xPos(tick)} y={height - 18} text-anchor="middle" class="tick-label">
+				{fmt(tick)}
 			</text>
 		{/each}
 
@@ -225,7 +216,7 @@
 
 	<div class="text-center !mt-2 text-xs text-gray-500">
 		Interface velocity: <span class="text-emerald-400 font-medium"
-			>{getInterfaceVelocity().toFixed(2)} m/s</span
+			>{interfaceVel.toFixed(2)} m/s</span
 		>
 	</div>
 </div>

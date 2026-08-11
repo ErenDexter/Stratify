@@ -27,7 +27,7 @@
 
 			<label class="block mb-5">
 				<span class="text-sm text-gray-300 font-medium"
-					>Flow Rate: {upperFlowRate.toFixed(2)} m/s {upperFlowRate < 0
+					>Flow Drive: {upperFlowRate.toFixed(2)} {upperFlowRate < 0
 						? '←'
 						: upperFlowRate > 0
 							? '→'
@@ -74,7 +74,7 @@
 
 			<label class="block mb-5">
 				<span class="text-sm text-gray-300 font-medium"
-					>Flow Rate: {lowerFlowRate.toFixed(2)} m/s {lowerFlowRate < 0
+					>Flow Drive: {lowerFlowRate.toFixed(2)} {lowerFlowRate < 0
 						? '←'
 						: lowerFlowRate > 0
 							? '→'

@@ -1,7 +1,27 @@
-import * as THREE from 'three';
 import type { ParticleData, FluidParameters } from '../types/simulation.types';
 import { PhysicsCalculator } from './PhysicsCalculator';
 
+// Interfacial (Kelvin-Helmholtz) wave shape.
+const WAVE_NUMBER = 2; // spatial wavenumber k
+const WAVE_ANGULAR_SPEED = 2; // temporal angular frequency omega
+const WAVE_DEPTH = 0.25; // how far from the interface the wave is felt
+const MAX_WAVE_AMPLITUDE = 0.12; // hard cap so the wave never tears the interface open
+const WAVE_GAIN = 0.06; // amplitude per unit of excess KH shear
+
+const TURBULENCE_STEP = 0.15; // scale of turbulent cross-stream diffusion
+const AXIAL_RELAXATION = 5.0; // rate particle speed relaxes to the local flow velocity
+const WALL_FRACTION = 0.99; // keep particles just inside the wall (no-slip)
+
+/**
+ * Advects tracer particles through the stratified velocity field.
+ *
+ * Vertical structure is anchored: each particle owns a stable base position
+ * (homeY, homeZ) inside its own phase. Immiscibility + gravity keep the phases
+ * from crossing the interface (reflection at y = 0), and the interface only
+ * carries a bounded, coherent wave when the flow is Kelvin-Helmholtz unstable.
+ * This is what keeps the two layers intact instead of pumping a void open at
+ * the interface.
+ */
 export class ParticleSystem {
 	private particleCount: number;
 	private pipeLength: number;
@@ -13,219 +33,158 @@ export class ParticleSystem {
 		this.pipeRadius = pipeRadius;
 	}
 
-	initializeParticles(phase: 'upper' | 'lower', yOffset: number): ParticleData {
-		const positions = new Float32Array(this.particleCount * 3);
-		const velocities = new Float32Array(this.particleCount * 3);
-		const sizes = new Float32Array(this.particleCount);
+	initializeParticles(phase: 'upper' | 'lower'): ParticleData {
+		const n = this.particleCount;
+		const positions = new Float32Array(n * 3);
+		const velocities = new Float32Array(n * 3);
+		const sizes = new Float32Array(n);
+		const homeY = new Float32Array(n);
+		const homeZ = new Float32Array(n);
+		const R = this.pipeRadius;
 
-		for (let i = 0; i < this.particleCount; i++) {
+		for (let i = 0; i < n; i++) {
 			const i3 = i * 3;
 
+			// Uniform over the half-disc that belongs to this phase.
+			const radius = Math.sqrt(Math.random()) * R;
+			const angle = Math.random() * Math.PI; // [0, PI] -> sin >= 0
+			const z = radius * Math.cos(angle);
+			let y = radius * Math.sin(angle); // >= 0
+			if (phase === 'lower') y = -y; // heavy phase sits below the interface
+
 			positions[i3] = (Math.random() - 0.5) * this.pipeLength;
+			positions[i3 + 1] = y;
+			positions[i3 + 2] = z;
+			homeY[i] = y;
+			homeZ[i] = z;
 
-			// Uniform distribution in semi-circle using polar sampling
-			const radius = Math.sqrt(Math.random()) * this.pipeRadius;
-			const overlap = this.pipeRadius * 0.3;
-
-			if (phase === 'upper') {
-				const theta = Math.random() * Math.PI;
-				let y = radius * Math.sin(theta);
-				const z = radius * Math.cos(theta);
-
-				y -= overlap * Math.random();
-
-				positions[i3 + 1] = y + yOffset;
-				positions[i3 + 2] = z;
-			} else {
-				const theta = Math.random() * Math.PI + Math.PI;
-				let y = radius * Math.sin(theta);
-				const z = radius * Math.cos(theta);
-
-				y += overlap * Math.random();
-
-				positions[i3 + 1] = y + yOffset;
-				positions[i3 + 2] = z;
-			}
-
-			velocities[i3] = 0.1;
+			velocities[i3] = 0;
 			velocities[i3 + 1] = 0;
 			velocities[i3 + 2] = 0;
 
-			sizes[i] = 0.05 + Math.random() * 0.05;
+			sizes[i] = 0.04 + Math.random() * 0.05;
 		}
 
-		return { positions, velocities, sizes };
+		return { positions, velocities, sizes, homeY, homeZ };
 	}
 
 	updateParticles(
 		data: ParticleData,
-		params: FluidParameters,
+		phase: 'upper' | 'lower',
+		upper: FluidParameters,
+		lower: FluidParameters,
+		gravity: number,
 		deltaTime: number,
-		time: number,
-		interfaceVelocity?: number
+		time: number
 	): void {
-		const { positions, velocities } = data;
-		const { flowRate, viscosity } = params;
+		const { positions, velocities, homeY, homeZ } = data;
+		const R = this.pipeRadius;
+		const halfLen = this.pipeLength / 2;
+		const isUpper = phase === 'upper';
+
+		// Actual velocity scale of each layer (drive / viscosity): thicker = slower.
+		const upperVelocity = upper.flowRate / Math.max(1e-6, upper.viscosity);
+		const lowerVelocity = lower.flowRate / Math.max(1e-6, lower.viscosity);
+
+		// Interfacial wave amplitude, shared by both phases so the interface moves
+		// coherently. Zero unless the shear exceeds the Kelvin-Helmholtz threshold.
+		const velocityDiff = upperVelocity - lowerVelocity;
+		const critShear = PhysicsCalculator.kelvinHelmholtzCriticalShear(
+			upper.density,
+			lower.density,
+			gravity,
+			WAVE_NUMBER
+		);
+		let waveAmplitude = 0;
+		if (critShear > 0) {
+			const excess = Math.abs(velocityDiff) / critShear - 1;
+			if (excess > 0) waveAmplitude = Math.min(MAX_WAVE_AMPLITUDE, WAVE_GAIN * excess);
+		} else if (Math.abs(velocityDiff) > 0) {
+			waveAmplitude = MAX_WAVE_AMPLITUDE; // gravitationally unstable stratification
+		}
+
+		// Turbulent cross-stream mixing intensity for this phase (0 while laminar).
+		// Reynolds uses the layer's actual velocity, so thicker fluids stay laminar.
+		const own = isUpper ? upper : lower;
+		const ownVelocity = isUpper ? upperVelocity : lowerVelocity;
+		const reynolds = PhysicsCalculator.calculateReynoldsNumber(
+			own.density,
+			ownVelocity,
+			2 * R,
+			own.viscosity
+		);
+		const mixing = PhysicsCalculator.turbulentMixingFactor(reynolds);
+		const turbulentStep = mixing * TURBULENCE_STEP * Math.sqrt(deltaTime);
 
 		for (let i = 0; i < this.particleCount; i++) {
 			const i3 = i * 3;
-			const x = positions[i3];
-			const y = positions[i3 + 1];
-			const z = positions[i3 + 2];
 
-			// Calculate radial distance from center
-			const r = Math.sqrt(y * y + z * z);
+			let hy = homeY[i];
+			let hz = homeZ[i];
 
-			// Enforce no-slip boundary condition at pipe wall
-			// Particles very close to wall should have zero velocity
-			const wallDistance = this.pipeRadius - r;
-			const wallThickness = this.pipeRadius * 0.05; // 5% boundary layer
-
-			let targetVelocity;
-
-			if (interfaceVelocity !== undefined) {
-				targetVelocity = PhysicsCalculator.calculateStratifiedVelocity(
-					flowRate,
-					interfaceVelocity,
-					y,
-					z,
-					this.pipeRadius,
-					viscosity
-				);
-			} else {
-				targetVelocity = PhysicsCalculator.calculateParabolicVelocity(flowRate, r, this.pipeRadius);
+			// Turbulent diffusion of the base position (persistent random walk).
+			if (turbulentStep > 0) {
+				hy += (Math.random() - 0.5) * turbulentStep;
+				hz += (Math.random() - 0.5) * turbulentStep;
 			}
 
-			if (wallDistance < wallThickness) {
-				// Linear decay to zero velocity as approaching wall
-				const wallFactor = Math.max(0, wallDistance / wallThickness);
-				targetVelocity *= wallFactor;
-
-				velocities[i3] *= wallFactor;
+			// Buoyancy / immiscibility: each phase stays on its own side of the
+			// interface. A denser lower fluid and lighter upper fluid is
+			// gravitationally stable, so any excursion across y = 0 is reflected back.
+			if (isUpper) {
+				if (hy < 0) hy = -hy;
+			} else if (hy > 0) {
+				hy = -hy;
 			}
 
-			const relaxationFactor = 5.0 * deltaTime;
-			velocities[i3] += (targetVelocity - velocities[i3]) * relaxationFactor;
+			// No-slip wall: keep the base position inside the pipe.
+			const chord = Math.sqrt(Math.max(0, R * R - hz * hz));
+			const maxAbsY = chord * WALL_FRACTION;
+			if (hy > maxAbsY) hy = maxAbsY;
+			else if (hy < -maxAbsY) hy = -maxAbsY;
+			const maxAbsZ = R * WALL_FRACTION;
+			if (hz > maxAbsZ) hz = maxAbsZ;
+			else if (hz < -maxAbsZ) hz = -maxAbsZ;
 
-			if (Math.abs(targetVelocity) > 0.001 && wallDistance > wallThickness) {
-				velocities[i3] += targetVelocity * deltaTime * 0.1;
-			}
+			homeY[i] = hy;
+			homeZ[i] = hz;
 
-			positions[i3] += velocities[i3] * deltaTime;
-			positions[i3 + 1] += velocities[i3 + 1] * deltaTime;
-			positions[i3 + 2] += velocities[i3 + 2] * deltaTime;
-
-			const newR = Math.sqrt(
-				positions[i3 + 1] * positions[i3 + 1] + positions[i3 + 2] * positions[i3 + 2]
-			);
-			if (newR >= this.pipeRadius) {
-				const scale = (this.pipeRadius * 0.98) / newR;
-				positions[i3 + 1] *= scale;
-				positions[i3 + 2] *= scale;
-
-				// No-slip: zero all velocity components at wall
-				velocities[i3] = 0;
-				velocities[i3 + 1] = 0;
-				velocities[i3 + 2] = 0;
-			}
-
-			const lateralDamping = Math.max(0, 1 - 0.5 * deltaTime);
-			velocities[i3 + 1] *= lateralDamping;
-			velocities[i3 + 2] *= lateralDamping;
-
-			if (flowRate > 1.0) {
-				const turbulenceIntensity = (flowRate - 1.0) * 0.01;
-				positions[i3 + 1] += (Math.random() - 0.5) * turbulenceIntensity;
-				positions[i3 + 2] += (Math.random() - 0.5) * turbulenceIntensity;
-
-				const newR = Math.sqrt(
-					positions[i3 + 1] * positions[i3 + 1] + positions[i3 + 2] * positions[i3 + 2]
-				);
-				if (newR > this.pipeRadius * 0.9) {
-					const scale = (this.pipeRadius * 0.9) / newR;
-					positions[i3 + 1] *= scale;
-					positions[i3 + 2] *= scale;
+			// Coherent interfacial wave: a bounded vertical displacement measured
+			// from the anchor, so it can never accumulate into a drift.
+			let x = positions[i3];
+			let y = hy;
+			let z = hz;
+			if (waveAmplitude > 0) {
+				const envelope = 1 - Math.abs(hy) / WAVE_DEPTH;
+				if (envelope > 0) {
+					y = hy + waveAmplitude * envelope * Math.sin(WAVE_NUMBER * x - WAVE_ANGULAR_SPEED * time);
 				}
 			}
 
-			// Periodic boundary condition (both directions)
-			if (positions[i3] > this.pipeLength / 2) {
-				positions[i3] = -this.pipeLength / 2;
-			} else if (positions[i3] < -this.pipeLength / 2) {
-				positions[i3] = this.pipeLength / 2;
-			}
-		}
-	}
-
-	applyInterfaceInteraction(
-		upperData: ParticleData,
-		lowerData: ParticleData,
-		upperFlowRate: number,
-		lowerFlowRate: number,
-		upperViscosity: number,
-		lowerViscosity: number,
-		time: number
-	): void {
-		// Calculate interface velocity based on viscous coupling
-		const interfaceVelocity = PhysicsCalculator.calculateInterfaceVelocity(
-			upperFlowRate,
-			lowerFlowRate,
-			upperViscosity,
-			lowerViscosity
-		);
-
-		const velocityDiff = Math.abs(upperFlowRate - lowerFlowRate);
-		const waveAmplitude = velocityDiff * 0.05;
-		const waveFrequency = 2;
-		const waveSpeed = 2;
-
-		// Apply viscous coupling: particles near interface experience shear stress
-		const interfaceRegion = this.pipeRadius * 0.3;
-
-		for (let i = 0; i < this.particleCount; i++) {
-			const i3 = i * 3;
-			const xUpper = upperData.positions[i3];
-			const xLower = lowerData.positions[i3];
-			const yUpper = upperData.positions[i3 + 1];
-			const yLower = lowerData.positions[i3 + 1];
-
-			const distUpper = Math.abs(yUpper);
-			const distLower = Math.abs(yLower);
-
-			if (distUpper < interfaceRegion) {
-				const couplingStrength = 1 - distUpper / interfaceRegion;
-				const drag = PhysicsCalculator.calculateViscousDrag(
-					interfaceVelocity,
-					upperData.velocities[i3],
-					upperViscosity,
-					distUpper + 0.01
-				);
-				upperData.velocities[i3] += drag * couplingStrength;
+			// Containment backstop.
+			const rr = Math.hypot(y, z);
+			if (rr > R) {
+				const s = (R * WALL_FRACTION) / rr;
+				y *= s;
+				z *= s;
 			}
 
-			if (distLower < interfaceRegion) {
-				const couplingStrength = 1 - distLower / interfaceRegion;
-				const drag = PhysicsCalculator.calculateViscousDrag(
-					interfaceVelocity,
-					lowerData.velocities[i3],
-					lowerViscosity,
-					distLower + 0.01
-				);
-				lowerData.velocities[i3] += drag * couplingStrength;
-			}
+			// Axial motion: relax the particle speed toward the local stratified
+			// velocity, then advect. As particles diffuse in y they sample different
+			// speeds, which is what makes turbulent flow look streaky.
+			const target = PhysicsCalculator.stratifiedAxialVelocity(y, z, upper, lower, R);
+			let vx = velocities[i3];
+			vx += (target - vx) * Math.min(1, AXIAL_RELAXATION * deltaTime);
+			x += vx * deltaTime;
 
-			// Apply Kelvin-Helmholtz instability at interface (reduced to prevent separation)
-			// Convert wave displacement to vertical velocity component
-			// v_y = d(A*sin(kx - wt))/dt = -A*w*cos(kx - wt) (roughly)
-			// We add this to velocity instead of position to avoid accumulation drift
-			const waveVel = waveAmplitude * 2.0 * Math.cos(xUpper * waveFrequency + time * waveSpeed);
-			if (distUpper < 0.2) {
-				upperData.velocities[i3 + 1] += waveVel * (1 - distUpper / 0.2) * 0.02;
-			}
+			// Periodic boundary condition along the pipe.
+			if (x > halfLen) x -= this.pipeLength;
+			else if (x < -halfLen) x += this.pipeLength;
 
-			if (distLower < 0.2) {
-				lowerData.velocities[i3 + 1] += waveVel * (1 - distLower / 0.2) * 0.02;
-			}
+			positions[i3] = x;
+			positions[i3 + 1] = y;
+			positions[i3 + 2] = z;
+			velocities[i3] = vx;
 		}
 	}
 }

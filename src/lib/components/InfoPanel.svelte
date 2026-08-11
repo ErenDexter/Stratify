@@ -84,6 +84,10 @@
 
 		<p class="text-sm md:text-base text-gray-300 !mb-2 leading-relaxed">
 			Interactive two-phase stratified flow simulation in a horizontal pipe with momentum transfer.
+			<span class="text-gray-400"
+				>Flow Drive sets how hard each fluid is pushed; higher viscosity resists it, so a thicker
+				fluid flows slower. The graph shows the resulting velocity.</span
+			>
 		</p>
 
 		<div class="!mb-2">
